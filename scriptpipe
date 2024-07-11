@@ -1,0 +1,78 @@
+#!groovy
+import java.text.SimpleDateFormat
+
+def dateFormat = new SimpleDateFormat("yyyyMMddHHmm")
+def date = new Date()
+def timestamp = dateFormat.format(date).toString()
+pipeline {
+    agent any
+    stages {
+        stage('Ejecutar Pruebas') {
+            steps {
+                script {
+                    try {
+                        //bat ("gradle clean test -DRunner=\"${Runner}\" aggregate") //Ejecución en agente Windows con parametro jenkins
+                        bat("gradle clean test -DRunner=\"RunnerTags.java\" aggregate")
+                        //Ejecución en agente Linux con parametro jenkins
+                        //bat("gradle clean test aggregate") //Ejecución en agente windows sin parametro jenkins
+                        echo 'Test Ejecutados sin Fallo'
+                        currentBuild.result = 'SUCCESS'
+                    }
+                    catch (ex) {
+                        echo 'Test Ejecutados con Fallo'
+                        currentBuild.result = 'UNSTABLE'
+                    }
+                }
+            }
+        }
+        stage('Generar evidencia') {
+            steps
+                    {
+                        script
+                                {
+                                    try {
+                                        bat " rename \"target\\site\\serenity\" serenity_${timestamp}"
+                                        echo 'Backup de evidencias realizado con exito'
+                                        publishHTML([
+                                                allowMissing         : false,
+                                                alwaysLinkToLastBuild: true,
+                                                keepAll              : true,
+                                                reportDir            : "target\\site\\serenity_${timestamp}",
+                                                reportFiles          : 'index.html',
+                                                reportName           : 'Evidencias Automatizacion APIs Banbif',
+                                                reportTitles         : 'APIs BANBIF PERU'
+                                        ])
+                                        echo 'Reporte Html realizado con exito'
+                                    }
+                                    catch (e) {
+                                        echo 'No se realizo el Backup de evidencias'
+                                        publishHTML([allowMissing: false, alwaysLinkToLastBuild: true, keepAll: true, reportDir: "${WORKSPACE}//target//site//serenity_${timestamp}", reportFiles: 'index.html', reportName: 'Evidencias Automatizacion APIs Banbif', reportTitles: 'APIs BANBIF PERU'])
+                                        echo 'Reporte Html realizado con exito'
+                                        currentBuild.result = 'SUCCESS'
+                                    } finally {
+
+                                        archiveArtifacts '**/*'
+
+                                        step([
+                                                $class               : 'CucumberReportPublisher',
+                                                failedFeaturesNumber : 0,
+                                                failedScenariosNumber: 0,
+                                                failedStepsNumber    : 0,
+                                                fileExcludePattern   : '',
+                                                fileIncludePattern   : '**/*.json',
+                                                jsonReportDirectory  : 'target/cucumber',
+                                                skippedStepsNumber   : 0,
+
+
+                                                sortingMethod        : 'ALPHABETICAL'
+
+
+                                        ])
+
+
+                                    }
+                                }
+                    }
+        }
+    }
+}
